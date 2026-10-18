@@ -1,0 +1,6 @@
+{
+  "name": "Newtonite - Operations Under Pressure",
+  "description": "High-integrity internal operations platform built for high-concurrency environments with optimistic locking, transactional outbox, and idempotent workflows.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

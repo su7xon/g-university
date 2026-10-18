@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: newtonite_app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - DATABASE_URL=postgresql://newtonite:password@postgres:5432/newtonite?schema=public
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=newtonite-operations-under-pressure-secure-jwt-key
+      - OUTBOX_POLL_INTERVAL_MS=2000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: npm run dev
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: newtonite_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: newtonite
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: newtonite
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U newtonite -d newtonite"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: newtonite_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:

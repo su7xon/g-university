@@ -1,0 +1,186 @@
+// Prisma schema for Newtonite - Operations Under Pressure
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  Viewer
+  Member
+  Lead
+  Admin
+}
+
+enum ItemType {
+  incident
+  customer_issue
+  payment
+  compliance
+  task
+}
+
+enum Priority {
+  low
+  medium
+  high
+  urgent
+}
+
+enum ItemStatus {
+  Open
+  InProgress
+  AwaitingApproval
+  Resolved
+  Closed
+}
+
+enum ActivityAction {
+  created
+  assigned
+  status_changed
+  priority_changed
+  commented
+}
+
+enum JobStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
+model User {
+  id            String       @id @default(uuid())
+  name          String
+  email         String       @unique
+  password_hash String
+  created_at    DateTime     @default(now())
+
+  memberships   Membership[]
+  assigned_items WorkItem[]   @relation("Assignee")
+  created_items  WorkItem[]   @relation("Creator")
+  activity_events ActivityEvent[]
+  comments      Comment[]
+
+  @@map("users")
+}
+
+model Team {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  created_at  DateTime     @default(now())
+
+  memberships Membership[]
+  work_items  WorkItem[]
+
+  @@map("teams")
+}
+
+model Membership {
+  user_id    String
+  team_id    String
+  role       Role         @default(Member)
+  created_at DateTime     @default(now())
+
+  user       User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  team       Team         @relation(fields: [team_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, team_id])
+  @@index([team_id])
+  @@index([user_id])
+  @@map("memberships")
+}
+
+model WorkItem {
+  id          String       @id @default(uuid())
+  title       String
+  description String
+  type        ItemType
+  priority    Priority     @default(medium)
+  status      ItemStatus   @default(Open)
+  team_id     String
+  assignee_id String?
+  created_by  String
+  due_date    DateTime?
+  version     Int          @default(1)
+  created_at  DateTime     @default(now())
+  updated_at  DateTime     @updatedAt
+
+  team        Team         @relation(fields: [team_id], references: [id], onDelete: Cascade)
+  assignee    User?        @relation("Assignee", fields: [assignee_id], references: [id], onDelete: SetNull)
+  creator     User         @relation("Creator", fields: [created_by], references: [id], onDelete: Restrict)
+  
+  activities  ActivityEvent[]
+  comments    Comment[]
+
+  @@index([status])
+  @@index([priority])
+  @@index([assignee_id])
+  @@index([team_id])
+  @@index([created_at])
+  @@map("work_items")
+}
+
+model ActivityEvent {
+  id           String         @id @default(uuid())
+  work_item_id String
+  actor_id     String
+  action       ActivityAction
+  from_value   String?
+  to_value     String?
+  created_at   DateTime       @default(now())
+
+  work_item    WorkItem       @relation(fields: [work_item_id], references: [id], onDelete: Cascade)
+  actor        User           @relation(fields: [actor_id], references: [id], onDelete: Cascade)
+
+  @@index([work_item_id, created_at])
+  @@map("activity_events")
+}
+
+model Comment {
+  id           String    @id @default(uuid())
+  work_item_id String
+  author_id    String
+  body         String
+  created_at   DateTime  @default(now())
+
+  work_item    WorkItem  @relation(fields: [work_item_id], references: [id], onDelete: Cascade)
+  author       User      @relation(fields: [author_id], references: [id], onDelete: Cascade)
+
+  @@index([work_item_id, created_at])
+  @@map("comments")
+}
+
+model IdempotencyKey {
+  key             String    @id
+  method          String
+  path            String
+  response_status Int
+  response_body   String
+  created_at      DateTime  @default(now())
+  expires_at      DateTime
+
+  @@index([expires_at])
+  @@map("idempotency_keys")
+}
+
+model OutboxJob {
+  id            String    @id @default(uuid())
+  type          String    @default("notify_assignee")
+  payload       Json
+  status        JobStatus @default(pending)
+  attempts      Int       @default(0)
+  max_attempts  Int       @default(5)
+  last_error    String?
+  next_retry_at DateTime  @default(now())
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  @@index([status, next_retry_at])
+  @@map("outbox_jobs")
+}
